@@ -1,7 +1,7 @@
 {
   "domain": "local_openai",
   "name": "Local OpenAI (LM Studio)",
-  "codeowners": ["@bjornreints"],
+  "codeowners": ["@dahamsterbr"],
   "config_flow": true,
   "documentation": "https://github.com/dahamsterbr/homeassistant",
   "iot_class": "local_polling",
