@@ -78,7 +78,20 @@ Or copy from this repo’s `custom_components/local_openai`.
 2. Restart Home Assistant.
 3. **Settings → Devices & Services → Add Integration → Local OpenAI (LM Studio)**
 4. Base URL: `http://<LM_HOST>:1234/v1`, model: `google/gemma-4-12b`
-5. **Settings → Voice assistants → Assist** → set the conversation agent to Local OpenAI.
+5. **Settings → Voice assistants → Assist** → create/edit a pipeline for **Home Assistant Voice**:
+   - Conversation agent: **Local OpenAI** (LM Studio / Gemma)
+   - STT: Whisper (or preferred)
+   - TTS: Piper (or preferred)
+6. Expose the lights/switches you want to control to Assist (entity settings → voice assistants).
+7. Prefer model **`google/gemma-4-12b`** for voice control; enable tool calling in LM Studio.
+
+Multi-command examples that should work with Local OpenAI:
+
+- `lamp keuken uit en lamp woonkamer aan`
+- `light A out and light B on`
+- `zet de gang uit en de computer lamp aan`
+
+Built-in Home Assistant Assist (non-LLM) usually only handles **one** intent per sentence — use Local OpenAI for multi-action.
 
 ## 6. Verify
 

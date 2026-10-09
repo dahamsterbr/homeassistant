@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import uuid
 from typing import Any, Literal
 
 from homeassistant.components import conversation
@@ -30,6 +31,18 @@ _LOGGER = logging.getLogger(__name__)
 WEATHER_HINT = re.compile(
     r"\b(weer|weather|forecast|voorspelling|temperatuur|temperature|regen|rain|"
     r"buienradar|zonnig|wind)\b",
+    re.I,
+)
+
+# Multi-action / device control cues (NL + EN, including "out" as "uit")
+CONTROL_HINT = re.compile(
+    r"\b(aan|uit|out|on|off|dim|zet|doe|toggle|open|dicht|close|"
+    r"lamp|light|licht|switch|scene|klima|thermostat|media)\b",
+    re.I,
+)
+MULTI_HINT = re.compile(
+    r"\b(en|and|ook|also|daarna|then|plus)\b|,"
+    r"|\b\w+\s+(aan|uit|out|on|off)\b.+\b\w+\s+(aan|uit|out|on|off)\b",
     re.I,
 )
 
@@ -77,6 +90,7 @@ class LocalOpenAIAgent(conversation.ConversationEntity):
         api_key = options.get(CONF_API_KEY) or "lmstudio"
         model = options[CONF_MODEL]
         raw_prompt = options.get(CONF_PROMPT) or DEFAULT_PROMPT
+        text = user_input.text or ""
 
         conversation_id = user_input.conversation_id or (
             user_input.context.id if user_input.context else None
@@ -95,39 +109,68 @@ class LocalOpenAIAgent(conversation.ConversationEntity):
         except Exception:  # noqa: BLE001
             prompt = str(raw_prompt)
 
+        multi = bool(MULTI_HINT.search(text) and CONTROL_HINT.search(text))
         prompt = (
             f"{prompt}\n\n"
-            "You have Home Assistant tools for live home data and device control. "
-            "For weather, forecasts, temperatures, or sensor values: ALWAYS call tools "
-            "(GetLiveContext / weather / entity tools) before answering. "
-            "Never invent weather. You do NOT have open internet search; "
-            "use Home Assistant entities and tools only. Prefer Dutch when the user does."
+            "You have Home Assistant Assist tools for device control and live data. "
+            "For weather: ALWAYS use tools/entities; never invent. No open internet. "
+            "Dutch/English mix is OK: 'uit'/'out'/'off' = off, 'aan'/'on' = on.\n"
+            "MULTI-COMMAND RULE: if the user asks for more than one action in one "
+            "sentence, emit MULTIPLE tool calls in one assistant turn "
+            "(e.g. HassTurnOff for lamp A AND HassTurnOn for lamp B). "
+            "Never stop after the first action."
         )
+        if multi:
+            prompt += (
+                "\nThis user message contains MULTIPLE actions — you MUST use "
+                "multiple tool calls before you reply."
+            )
         if api and getattr(api, "api_prompt", None):
             prompt = f"{prompt}\n\n{api.api_prompt}"
 
-        # Inject weather entity snapshot so small local models can answer without tools
-        live_bits = await self._live_context_snippet(user_input.text)
+        live_bits = await self._live_context_snippet(text)
         if live_bits:
             prompt = f"{prompt}\n\nLive Home Assistant context:\n{live_bits}"
 
         messages: list[dict[str, Any]] = [{"role": "system", "content": prompt}]
         messages.extend(history)
-        messages.append({"role": "user", "content": user_input.text})
+        user_msg = text
+        if multi:
+            user_msg = (
+                f"{text}\n\n"
+                "(Reminder: split into separate tool calls for each light/device action.)"
+            )
+        messages.append({"role": "user", "content": user_msg})
 
         tools = _convert_tools(getattr(api, "tools", None), self.hass) if api else None
         if tools:
             _LOGGER.debug("Exposing %s Assist tools to LM Studio", len(tools))
 
         try:
-            content = await self._tool_loop(
-                base_url, api_key, model, messages, tools, api
+            content, tool_count = await self._tool_loop(
+                base_url,
+                api_key,
+                model,
+                messages,
+                tools,
+                api,
+                force_tools_first=bool(
+                    tools and (multi or WEATHER_HINT.search(text) or CONTROL_HINT.search(text))
+                ),
+                expect_multi=multi,
             )
         except Exception as err:  # noqa: BLE001
             _LOGGER.exception("LM Studio request failed")
             raise HomeAssistantError(f"LM Studio error: {err}") from err
 
-        history.append({"role": "user", "content": user_input.text})
+        if multi and tool_count < 2:
+            _LOGGER.warning(
+                "Multi-command utterance produced only %s tool call(s): %s",
+                tool_count,
+                text,
+            )
+
+        history.append({"role": "user", "content": text})
         history.append({"role": "assistant", "content": content or "OK"})
         self._history[conversation_id] = history[-20:]
 
@@ -146,13 +189,31 @@ class LocalOpenAIAgent(conversation.ConversationEntity):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None,
         api: llm.APIInstance | None,
-        max_rounds: int = 6,
-    ) -> str:
+        *,
+        force_tools_first: bool = False,
+        expect_multi: bool = False,
+        max_rounds: int = 8,
+    ) -> tuple[str, int]:
         content = ""
+        total_tools = 0
         for round_i in range(max_rounds):
-            force_tools = bool(tools) and round_i == 0 and WEATHER_HINT.search(
-                messages[-1].get("content", "")
+            force = bool(tools) and (
+                (force_tools_first and round_i == 0)
+                or (expect_multi and round_i == 0)
             )
+            # After first tools, if multi expected and only one tool so far, nudge
+            if expect_multi and total_tools == 1 and round_i == 1 and tools:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "You only completed one action. Call tools for any "
+                            "remaining actions from my original request now."
+                        ),
+                    }
+                )
+                force = True
+
             content, tool_calls = await self.hass.async_add_executor_job(
                 _chat_completion,
                 base_url,
@@ -160,10 +221,21 @@ class LocalOpenAIAgent(conversation.ConversationEntity):
                 model,
                 messages,
                 tools if round_i < max_rounds - 1 else None,
-                "required" if force_tools else ("auto" if tools else None),
+                "required" if force else ("auto" if tools else None),
             )
+            if not tool_calls:
+                # Some local models put JSON tool requests in content
+                tool_calls = _parse_tools_from_content(content)
             if not tool_calls or not api or not hasattr(api, "async_call_tool"):
-                return content or "OK"
+                return content or "OK", total_tools
+
+            total_tools += len(tool_calls)
+            _LOGGER.info(
+                "Assist tool round %s: %s call(s): %s",
+                round_i,
+                len(tool_calls),
+                [t["name"] for t in tool_calls],
+            )
 
             messages.append(
                 {
@@ -199,10 +271,9 @@ class LocalOpenAIAgent(conversation.ConversationEntity):
                         "content": json.dumps(tool_result, default=str),
                     }
                 )
-        return content or "OK"
+        return content or "OK", total_tools
 
     async def _live_context_snippet(self, text: str) -> str:
-        """Pull weather / forecast states so answers work even without tool-calls."""
         if not WEATHER_HINT.search(text or ""):
             return ""
         lines: list[str] = []
@@ -218,15 +289,20 @@ class LocalOpenAIAgent(conversation.ConversationEntity):
             if isinstance(forecast, list) and forecast:
                 first = forecast[0]
                 lines.append(
-                    f"  next: {first.get('datetime') or first.get('datetime')} "
+                    f"  next: {first.get('datetime')} "
                     f"cond={first.get('condition')} temp={first.get('temperature')}"
                 )
-        # Also common NL weather sensors
         for eid in list(self.hass.states.async_entity_ids("sensor")):
-            if any(k in eid for k in ("buienradar", "weather", "temperature_outside", "neerslag")):
+            if any(
+                k in eid
+                for k in ("buienradar", "weather", "temperature_outside", "neerslag")
+            ):
                 st = self.hass.states.get(eid)
                 if st:
-                    lines.append(f"- {eid}: {st.state} {st.attributes.get('unit_of_measurement', '')}")
+                    lines.append(
+                        f"- {eid}: {st.state} "
+                        f"{st.attributes.get('unit_of_measurement', '')}"
+                    )
             if len(lines) > 40:
                 break
         return "\n".join(lines[:40])
@@ -268,6 +344,56 @@ class LocalOpenAIAgent(conversation.ConversationEntity):
             except Exception:  # noqa: BLE001
                 _LOGGER.debug("Assist LLM API attempt failed", exc_info=True)
         return None
+
+
+def _parse_tools_from_content(content: str | None) -> list[dict[str, Any]]:
+    """Fallback when local models emit tool JSON in the text body."""
+    if not content:
+        return []
+    cleaned = re.sub(r"<think>[\s\S]*?</think>", "", content, flags=re.I).strip()
+    # tool request blocks or raw JSON arrays/objects
+    candidates: list[Any] = []
+    try:
+        data = json.loads(cleaned)
+        candidates.append(data)
+    except json.JSONDecodeError:
+        for match in re.finditer(r"\[[\s\S]*\]|\{[\s\S]*\}", cleaned):
+            try:
+                candidates.append(json.loads(match.group(0)))
+            except json.JSONDecodeError:
+                continue
+    tools: list[dict[str, Any]] = []
+    for data in candidates:
+        items = data if isinstance(data, list) else [data]
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            name = (
+                item.get("name")
+                or item.get("tool")
+                or (item.get("function") or {}).get("name")
+            )
+            args = (
+                item.get("arguments")
+                or item.get("args")
+                or item.get("parameters")
+                or (item.get("function") or {}).get("arguments")
+                or {}
+            )
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except json.JSONDecodeError:
+                    args = {}
+            if name:
+                tools.append(
+                    {
+                        "id": item.get("id") or f"call_{uuid.uuid4().hex[:8]}",
+                        "name": name,
+                        "arguments": args if isinstance(args, dict) else {},
+                    }
+                )
+    return tools
 
 
 def _convert_tools(
@@ -324,24 +450,25 @@ def _chat_completion(
     kwargs: dict[str, Any] = {
         "model": model,
         "messages": messages,
-        "temperature": 0.2,
+        "temperature": 0.1,
     }
     if tools:
         kwargs["tools"] = tools
         if tool_choice:
             kwargs["tool_choice"] = tool_choice
+        # Encourage parallel tool calls when the server supports it
+        kwargs["parallel_tool_calls"] = True
     try:
         response = client.chat.completions.create(**kwargs)
     except Exception:
-        # Some local servers reject tool_choice=required
-        if "tool_choice" in kwargs:
-            kwargs.pop("tool_choice", None)
+        kwargs.pop("tool_choice", None)
+        kwargs.pop("parallel_tool_calls", None)
+        try:
             response = client.chat.completions.create(**kwargs)
-        else:
+        except Exception:
             raise
     message = response.choices[0].message
     content = message.content or ""
-    # Strip thinking tags from reasoning models
     content = re.sub(r"<think>[\s\S]*?</think>", "", content, flags=re.I).strip()
     parsed_tools: list[dict[str, Any]] = []
     if message.tool_calls:

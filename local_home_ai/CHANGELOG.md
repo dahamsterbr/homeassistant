@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3
+
+- Assist: multi-command sentences (e.g. lamp A uit en lamp B aan) via parallel/sequential tool calls
+- Treat spoken "out" as off; nudge model if only one of several actions ran
+
 ## 1.0.2
 
 - Auto-fix `llm_base_url` missing port (default `:1234`) and ensure `/v1` suffix
