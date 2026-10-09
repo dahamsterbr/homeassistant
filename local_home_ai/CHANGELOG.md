@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2
+
+- Auto-fix `llm_base_url` missing port (default `:1234`) and ensure `/v1` suffix
+- Clearer connection-error hints in health/status
+
 ## 1.0.1
 
 - Always call LM Studio for who-is-in-room (no longer skip LLM when only one person is home)

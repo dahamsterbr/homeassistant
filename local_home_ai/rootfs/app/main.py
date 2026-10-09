@@ -68,6 +68,8 @@ async def lifespan(_: FastAPI):
         options.llm_base_url,
         options.mqtt_host,
     )
+    if ":1234" not in options.llm_base_url and "localhost" not in options.llm_base_url:
+        logger.info("Tip: LM Studio default API is http://<ip>:1234/v1")
 
     memory = MemoryStore(data_dir() / "lhai.db")
     ha_client = HomeAssistantClient(options.ha_url, options.ha_token)

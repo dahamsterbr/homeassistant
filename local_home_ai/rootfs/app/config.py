@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_ROOMS: list[dict[str, Any]] = [
@@ -116,12 +120,51 @@ class Options(BaseModel):
     )
 
 
+def normalize_llm_base_url(url: str) -> str:
+    """Ensure LM Studio URL has a port (default 1234) and ends with /v1."""
+    raw = (url or "").strip().rstrip("/")
+    if not raw:
+        return "http://192.168.1.10:1234/v1"
+    if "://" not in raw:
+        raw = "http://" + raw
+    parsed = urlparse(raw)
+    host = parsed.hostname or ""
+    port = parsed.port
+    scheme = parsed.scheme or "http"
+    path = parsed.path or ""
+
+    # Common misconfig: http://10.x.x.x/v1 without :1234
+    if port is None and host and scheme in {"http", "https"}:
+        # Keep explicit 80/443 only if user wrote them; missing port → LM Studio 1234
+        port = 1234
+        logger.warning(
+            "llm_base_url had no port; assuming LM Studio default :1234 → %s://%s:1234...",
+            scheme,
+            host,
+        )
+
+    if not path or path == "/":
+        path = "/v1"
+    elif not path.rstrip("/").endswith("/v1"):
+        path = path.rstrip("/") + "/v1"
+
+    netloc = host
+    if port:
+        netloc = f"{host}:{port}"
+    fixed = urlunparse((scheme, netloc, path, "", "", ""))
+    return fixed.rstrip("/")
+
+
 def load_options() -> Options:
     path = Path(os.environ.get("LHAI_OPTIONS_PATH", "/data/options.json"))
     raw: dict[str, Any] = {}
     if path.is_file():
         raw = json.loads(path.read_text(encoding="utf-8"))
     opts = Options.model_validate(raw)
+    original = opts.llm_base_url
+    opts.llm_base_url = normalize_llm_base_url(opts.llm_base_url)
+    if opts.llm_base_url != original.rstrip("/"):
+        logger.warning("Normalized llm_base_url: %s -> %s", original, opts.llm_base_url)
     if not opts.rooms:
         opts.rooms = [RoomConfig.model_validate(r) for r in DEFAULT_ROOMS]
     return opts

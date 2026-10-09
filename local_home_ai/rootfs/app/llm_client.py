@@ -78,9 +78,16 @@ class LLMClient:
         except Exception as exc:  # noqa: BLE001
             self.available = False
             self.last_error = str(exc)
+            hint = ""
+            if "All connection attempts failed" in str(exc) or "ConnectError" in type(exc).__name__:
+                hint = (
+                    f" Cannot reach {self.base_url}. "
+                    "Use http://<LM-Studio-PC-IP>:1234/v1, enable server on 0.0.0.0, "
+                    "and allow the HA host through the firewall."
+                )
             return {
                 "ok": False,
-                "error": str(exc),
+                "error": str(exc) + hint,
                 "models": [],
                 "call_count": self.call_count,
                 "last_call": self.last_call,
