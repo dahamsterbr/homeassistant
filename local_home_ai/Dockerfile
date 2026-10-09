@@ -27,6 +27,6 @@ LABEL \
     io.hass.name="Local Home AI" \
     io.hass.description="Local LM Studio presence fusion and learning for Home Assistant" \
     io.hass.type="addon" \
-    io.hass.version="1.0.0"
+    io.hass.version="1.0.1"
 
 CMD ["/run.sh"]

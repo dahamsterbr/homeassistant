@@ -126,7 +126,7 @@ async def lifespan(_: FastAPI):
         memory.close()
 
 
-app = FastAPI(title="Local Home AI", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Local Home AI", version="1.0.1", lifespan=lifespan)
 
 
 @app.get("/health")

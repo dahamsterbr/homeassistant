@@ -83,5 +83,7 @@ Or copy from this repo’s `custom_components/local_openai`.
 ## 6. Verify
 
 1. Walk through keuken/gang — `binary_sensor.lhai_*_occupied` should flip.
-2. With one person home, `sensor.lhai_*_likely_person` should resolve.
-3. `GET http://<ha-host>:8099/health` (or via ingress/port mapping) shows `llm.ok` and room snapshot.
+2. When a room is occupied, check add-on logs for `Calling LLM for room=...` and `LLM OK purpose=attribute:...`.
+3. Entities `sensor.lhai_*_reason` should look like `[google/gemma-4-12b] ...` (not only heuristic text).
+4. System sensors: `binary_sensor.lhai_llm_ok`, `sensor.lhai_llm_calls`, `sensor.lhai_llm_last`.
+5. Assist weather: expose your `weather.*` / Buienradar entities to Assist, then ask “wat is het weer?”. There is **no open internet search** — answers come from HA weather entities/tools only.

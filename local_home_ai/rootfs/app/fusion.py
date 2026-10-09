@@ -24,6 +24,7 @@ class RoomResult:
     confidence: float
     person: str = "unknown"
     reason: str = ""
+    model: str = ""
     features: dict[str, float] = field(default_factory=dict)
     score: float = 0.0
 
@@ -44,7 +45,8 @@ class FusionEngine:
         self.mqtt = mqtt
         self._last: dict[str, RoomResult] = {}
         self._last_attr_ts: dict[str, float] = {}
-        self._attr_cooldown = 45.0
+        # Re-ask the model periodically while occupied so LM Studio activity is visible
+        self._attr_cooldown = float(getattr(options, "attr_cooldown_seconds", 60) or 60)
 
     def evaluate_room(self, room: RoomConfig) -> RoomResult:
         features: dict[str, float] = {}
@@ -79,17 +81,18 @@ class FusionEngine:
         prev = self._last.get(room.name)
         person = prev.person if prev and occupied else "unknown"
         reason = prev.reason if prev and occupied else "fusion"
+        model = prev.model if prev and occupied else ""
 
-        result = RoomResult(
+        return RoomResult(
             room=room.name,
             occupied=occupied,
             confidence=confidence,
             person=person if occupied else "unknown",
             reason=reason if occupied else "empty",
+            model=model if occupied else "",
             features=features,
             score=score,
         )
-        return result
 
     async def evaluate_all(self) -> list[RoomResult]:
         results: list[RoomResult] = []
@@ -100,12 +103,19 @@ class FusionEngine:
             self._publish(result)
             self._last[room.name] = result
             results.append(result)
+        self.mqtt.publish_llm_status(
+            ok=self.llm.available,
+            call_count=self.llm.call_count,
+            last_call=self.llm.last_call,
+            error=self.llm.last_error,
+        )
         return results
 
     async def _maybe_attribute(self, room: RoomConfig, result: RoomResult) -> None:
         if not result.occupied:
             result.person = "unknown"
             result.reason = "empty"
+            result.model = ""
             return
 
         now = time.time()
@@ -117,20 +127,29 @@ class FusionEngine:
             if prev:
                 result.person = prev.person
                 result.reason = prev.reason
+                result.model = prev.model
             return
 
         persons = self.ha.persons_home(self.options.persons)
         snippets = self.memory.recent_summaries(room.name)
+        logger.info(
+            "Calling LLM for room=%s occupied=True persons_home=%s",
+            room.name,
+            persons,
+        )
         attribution = await self.llm.attribute_person(
             room=room.name,
             features=result.features,
             persons_home=persons,
             memory_snippets=snippets,
             escalate_below=self.options.confidence_escalate,
+            force_llm=True,
         )
         result.person = str(attribution.get("person") or "unknown")
-        result.reason = str(attribution.get("reason") or "")
-        # Blend LLM confidence lightly into published confidence
+        model = str(attribution.get("model") or "llm")
+        reason = str(attribution.get("reason") or "")
+        result.model = model
+        result.reason = f"[{model}] {reason}".strip()
         llm_conf = float(attribution.get("confidence") or 0.0)
         if llm_conf > 0:
             result.confidence = min(1.0, (result.confidence * 0.7) + (llm_conf * 0.3))
@@ -138,7 +157,7 @@ class FusionEngine:
 
         summary = (
             f"{room.name}: occupied={result.occupied} person={result.person} "
-            f"conf={result.confidence:.2f} reason={result.reason}"
+            f"conf={result.confidence:.2f} model={model} reason={reason}"
         )
         self.memory.add_episode(
             room=room.name,
@@ -172,6 +191,7 @@ class FusionEngine:
             confidence=result.confidence,
             person=result.person,
             reason=result.reason,
+            model=result.model,
         )
 
     def snapshot(self) -> dict[str, Any]:
@@ -181,6 +201,7 @@ class FusionEngine:
                 "confidence": res.confidence,
                 "person": res.person,
                 "reason": res.reason,
+                "model": res.model,
                 "score": res.score,
             }
             for room, res in self._last.items()

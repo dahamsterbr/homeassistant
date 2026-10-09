@@ -37,6 +37,7 @@ class MqttPublisher:
         self.client.on_connect = self._on_connect
         self._connected = threading.Event()
         self._discovered: set[str] = set()
+        self._status_discovered = False
 
     def _on_connect(
         self,
@@ -70,12 +71,21 @@ class MqttPublisher:
         body = payload if isinstance(payload, str) else json.dumps(payload)
         self.client.publish(topic, body, qos=1, retain=retain)
 
+    def _device(self) -> dict[str, Any]:
+        return {
+            "identifiers": ["local_home_ai"],
+            "name": "Local Home AI",
+            "manufacturer": "Local",
+            "model": "Presence Fusion",
+        }
+
     def ensure_room_discovery(self, room: str, friendly: str | None = None) -> None:
         if room in self._discovered:
             return
         name = friendly or room.replace("_", " ").title()
         object_id = f"lhai_{room}"
         base = f"{self.state_prefix}/{room}"
+        device = self._device()
 
         occupied = {
             "name": f"LHAI {name} Occupied",
@@ -87,12 +97,7 @@ class MqttPublisher:
             "availability_topic": f"{self.state_prefix}/status",
             "payload_available": "online",
             "payload_not_available": "offline",
-            "device": {
-                "identifiers": ["local_home_ai"],
-                "name": "Local Home AI",
-                "manufacturer": "Local",
-                "model": "Presence Fusion",
-            },
+            "device": device,
         }
         confidence = {
             "name": f"LHAI {name} Confidence",
@@ -103,7 +108,7 @@ class MqttPublisher:
             "availability_topic": f"{self.state_prefix}/status",
             "payload_available": "online",
             "payload_not_available": "offline",
-            "device": occupied["device"],
+            "device": device,
         }
         person = {
             "name": f"LHAI {name} Likely Person",
@@ -112,7 +117,7 @@ class MqttPublisher:
             "availability_topic": f"{self.state_prefix}/status",
             "payload_available": "online",
             "payload_not_available": "offline",
-            "device": occupied["device"],
+            "device": device,
         }
         reason = {
             "name": f"LHAI {name} Reason",
@@ -121,7 +126,16 @@ class MqttPublisher:
             "availability_topic": f"{self.state_prefix}/status",
             "payload_available": "online",
             "payload_not_available": "offline",
-            "device": occupied["device"],
+            "device": device,
+        }
+        model = {
+            "name": f"LHAI {name} LLM Model",
+            "unique_id": f"{object_id}_llm_model",
+            "state_topic": f"{base}/llm_model",
+            "availability_topic": f"{self.state_prefix}/status",
+            "payload_available": "online",
+            "payload_not_available": "offline",
+            "device": device,
         }
 
         prefix = self.discovery_prefix
@@ -129,8 +143,44 @@ class MqttPublisher:
         self._publish(f"{prefix}/sensor/{object_id}_confidence/config", confidence)
         self._publish(f"{prefix}/sensor/{object_id}_likely_person/config", person)
         self._publish(f"{prefix}/sensor/{object_id}_reason/config", reason)
+        self._publish(f"{prefix}/sensor/{object_id}_llm_model/config", model)
         self._publish(f"{self.state_prefix}/status", "online")
         self._discovered.add(room)
+
+    def ensure_status_discovery(self) -> None:
+        if self._status_discovered:
+            return
+        device = self._device()
+        prefix = self.discovery_prefix
+        base = f"{self.state_prefix}/system"
+        for key, name, uid in (
+            ("llm_ok", "LHAI LLM Online", "lhai_llm_ok"),
+            ("llm_calls", "LHAI LLM Call Count", "lhai_llm_calls"),
+            ("llm_last", "LHAI LLM Last Call", "lhai_llm_last"),
+            ("llm_error", "LHAI LLM Error", "lhai_llm_error"),
+        ):
+            payload = {
+                "name": name,
+                "unique_id": uid,
+                "state_topic": f"{base}/{key}",
+                "availability_topic": f"{self.state_prefix}/status",
+                "payload_available": "online",
+                "payload_not_available": "offline",
+                "device": device,
+            }
+            if key == "llm_calls":
+                payload["state_class"] = "total_increasing"
+            domain = "binary_sensor" if key == "llm_ok" else "sensor"
+            if key == "llm_ok":
+                payload.update(
+                    {
+                        "payload_on": "ON",
+                        "payload_off": "OFF",
+                        "device_class": "connectivity",
+                    }
+                )
+            self._publish(f"{prefix}/{domain}/{uid}/config", payload)
+        self._status_discovered = True
 
     def publish_room(
         self,
@@ -140,6 +190,7 @@ class MqttPublisher:
         confidence: float,
         person: str,
         reason: str,
+        model: str = "",
     ) -> None:
         self.ensure_room_discovery(room)
         base = f"{self.state_prefix}/{room}"
@@ -147,3 +198,28 @@ class MqttPublisher:
         self._publish(f"{base}/confidence", f"{round(confidence * 100, 1)}")
         self._publish(f"{base}/likely_person", person or "unknown")
         self._publish(f"{base}/reason", (reason or "")[:255])
+        self._publish(f"{base}/llm_model", model or "none")
+
+    def publish_llm_status(
+        self,
+        *,
+        ok: bool,
+        call_count: int,
+        last_call: dict[str, Any] | None,
+        error: str | None,
+    ) -> None:
+        self.ensure_status_discovery()
+        base = f"{self.state_prefix}/system"
+        self._publish(f"{self.state_prefix}/status", "online")
+        self._publish(f"{base}/llm_ok", "ON" if ok else "OFF")
+        self._publish(f"{base}/llm_calls", str(call_count))
+        if last_call:
+            summary = (
+                f"{last_call.get('purpose', '?')} "
+                f"{last_call.get('model', '?')} "
+                f"{last_call.get('seconds', last_call.get('error', ''))}"
+            )
+        else:
+            summary = "none"
+        self._publish(f"{base}/llm_last", summary[:255])
+        self._publish(f"{base}/llm_error", (error or "")[:255])

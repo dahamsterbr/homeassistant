@@ -38,8 +38,10 @@ To reset learning only: stop add-on, delete `/data/lhai.db`, start again.
 
 ## Model routing
 
-- Occupancy attribution tries **fast** model first, escalates to **reason** when confidence &lt; `confidence_escalate` (default 0.55) or JSON parse fails.
+- Occupancy attribution **always** calls LM Studio when a room is occupied (also if only one person is home). Heuristic is only a fallback if the LLM request fails.
+- Fast model first, escalates to **reason** when confidence &lt; `confidence_escalate`, multi-person conflict, or JSON parse fails.
 - Assist uses the model configured in the Local OpenAI integration (recommend Gemma for tool use).
+- Weather/forecast: HA entities + Assist tools only. No general web search.
 
 ## Future sensors
 
