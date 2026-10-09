@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Local OpenAI / LM Studio",
+        "description": "Connect Home Assistant Assist to a local OpenAI-compatible server (LM Studio / Bionic).",
+        "data": {
+          "base_url": "Base URL",
+          "api_key": "API key",
+          "model": "Model",
+          "prompt": "System prompt"
+        }
+      }
+    },
+    "error": {
+      "invalid": "Invalid configuration"
+    },
+    "abort": {
+      "already_configured": "This LM Studio endpoint/model is already configured"
+    }
+  }
+}

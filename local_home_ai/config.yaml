@@ -1,0 +1,65 @@
+name: Local Home AI
+version: "1.0.0"
+slug: local_home_ai
+description: Fuse room presence sensors with LM Studio / Bionic local LLMs. All learning data stays on-device.
+url: https://github.com/bjornreints/homeassistant
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: services
+boot: auto
+hassio_api: true
+homeassistant_api: true
+host_network: false
+services:
+  - mqtt:want
+auth_api: true
+ports:
+  8099/tcp: 8099
+ports_description:
+  8099/tcp: Local Home AI health and status API
+map:
+  - share:rw
+  - addon_config:rw
+options:
+  ha_url: "http://homeassistant:8123"
+  ha_token: ""
+  llm_base_url: "http://192.168.1.10:1234/v1"
+  llm_api_key: "lmstudio"
+  model_fast: "nvidia-nemotron-3-nano-4b"
+  model_reason: "google/gemma-4-12b"
+  mqtt_host: "core-mosquitto"
+  mqtt_port: 1883
+  mqtt_user: ""
+  mqtt_password: ""
+  mqtt_discovery_prefix: "homeassistant"
+  mqtt_state_prefix: "lhai"
+  poll_seconds: 15
+  learn_enabled: true
+  confidence_escalate: 0.55
+  rooms: []
+schema:
+  ha_url: str
+  ha_token: password
+  llm_base_url: str
+  llm_api_key: password
+  model_fast: str
+  model_reason: str
+  mqtt_host: str
+  mqtt_port: int
+  mqtt_user: str
+  mqtt_password: password
+  mqtt_discovery_prefix: str
+  mqtt_state_prefix: str
+  poll_seconds: int(5,300)
+  learn_enabled: bool
+  confidence_escalate: float(0,1)
+  rooms:
+    - name: str
+      area_id: str?
+      sensors:
+        - entity_id: str
+          adapter: str
+      soft_entities:
+        - str?

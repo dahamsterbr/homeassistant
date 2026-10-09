@@ -1,0 +1,32 @@
+configuration:
+  ha_url:
+    name: Home Assistant URL
+    description: Usually http://homeassistant:8123 inside the Supervisor network.
+  ha_token:
+    name: Long-lived access token
+    description: Create under Profile → Security. Never commit this value.
+  llm_base_url:
+    name: LM Studio base URL
+    description: OpenAI-compatible endpoint, e.g. http://192.168.1.10:1234/v1
+  llm_api_key:
+    name: LM Studio API key
+    description: Often any non-empty string such as lmstudio.
+  model_fast:
+    name: Fast model
+  model_reason:
+    name: Reasoning model
+  mqtt_host:
+    name: MQTT host
+  mqtt_port:
+    name: MQTT port
+  mqtt_user:
+    name: MQTT username
+  mqtt_password:
+    name: MQTT password
+  learn_enabled:
+    name: Enable online learning
+  poll_seconds:
+    name: Evaluation interval (seconds)
+  rooms:
+    name: Room map override
+    description: Leave empty to use the built-in thuis map.
