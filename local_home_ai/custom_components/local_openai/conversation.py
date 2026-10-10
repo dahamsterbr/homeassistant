@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from homeassistant.components import conversation
@@ -20,10 +21,15 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     CONF_API_KEY,
     CONF_BASE_URL,
+    CONF_ENABLED,
+    CONF_LOG_PROMPTS,
     CONF_MODEL,
     CONF_PROMPT,
+    DEFAULT_ENABLED,
+    DEFAULT_LOG_PROMPTS,
     DEFAULT_PROMPT,
     DOMAIN,
+    PROMPT_DUMP_FILENAME,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -74,6 +80,11 @@ class LocalOpenAIAgent(conversation.ConversationEntity):
         }
         self._history: dict[str, list[dict[str, Any]]] = {}
 
+    def _conf(self, key: str, default: Any = None) -> Any:
+        if key in self.entry.options:
+            return self.entry.options[key]
+        return self.entry.data.get(key, default)
+
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:
         return MATCH_ALL
@@ -85,11 +96,23 @@ class LocalOpenAIAgent(conversation.ConversationEntity):
     async def async_process(
         self, user_input: conversation.ConversationInput
     ) -> conversation.ConversationResult:
-        options = self.entry.data
-        base_url = str(options[CONF_BASE_URL]).rstrip("/")
-        api_key = options.get(CONF_API_KEY) or "lmstudio"
-        model = options[CONF_MODEL]
-        raw_prompt = options.get(CONF_PROMPT) or DEFAULT_PROMPT
+        enabled = bool(self._conf(CONF_ENABLED, DEFAULT_ENABLED))
+        if not enabled:
+            intent_response = intent.IntentResponse(language=user_input.language)
+            intent_response.async_set_speech(
+                "Local OpenAI is disabled. Enable it under "
+                "Settings → Devices & Services → Local OpenAI → Configure."
+            )
+            return conversation.ConversationResult(
+                response=intent_response,
+                conversation_id=user_input.conversation_id,
+            )
+
+        base_url = str(self._conf(CONF_BASE_URL)).rstrip("/")
+        api_key = self._conf(CONF_API_KEY) or "lmstudio"
+        model = self._conf(CONF_MODEL)
+        raw_prompt = self._conf(CONF_PROMPT) or DEFAULT_PROMPT
+        log_prompts = bool(self._conf(CONF_LOG_PROMPTS, DEFAULT_LOG_PROMPTS))
         text = user_input.text or ""
 
         conversation_id = user_input.conversation_id or (
@@ -145,6 +168,9 @@ class LocalOpenAIAgent(conversation.ConversationEntity):
         tools = _convert_tools(getattr(api, "tools", None), self.hass) if api else None
         if tools:
             _LOGGER.debug("Exposing %s Assist tools to LM Studio", len(tools))
+
+        if log_prompts:
+            await self._dump_prompt(model, messages, tools)
 
         try:
             content, tool_count = await self._tool_loop(
@@ -272,6 +298,70 @@ class LocalOpenAIAgent(conversation.ConversationEntity):
                     }
                 )
         return content or "OK", total_tools
+
+    async def _dump_prompt(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+    ) -> None:
+        """Write the exact payload preview to /config and the HA log."""
+        stamp = datetime.now(timezone.utc).isoformat()
+        tool_names = [t["function"]["name"] for t in (tools or []) if "function" in t]
+        lines = [
+            f"# Local OpenAI prompt dump",
+            f"",
+            f"- time_utc: {stamp}",
+            f"- model: `{model}`",
+            f"- tools ({len(tool_names)}): {', '.join(tool_names) or '(none)'}",
+            f"",
+        ]
+        for i, msg in enumerate(messages):
+            role = msg.get("role", "?")
+            content = msg.get("content", "")
+            lines.append(f"## [{i}] role={role}")
+            lines.append("")
+            lines.append("```")
+            lines.append(str(content))
+            lines.append("```")
+            lines.append("")
+        if tools:
+            lines.append("## tools_json")
+            lines.append("")
+            lines.append("```json")
+            lines.append(json.dumps(tools, indent=2, ensure_ascii=False)[:20000])
+            lines.append("```")
+            lines.append("")
+
+        text = "\n".join(lines)
+        path = self.hass.config.path(PROMPT_DUMP_FILENAME)
+
+        def _write() -> None:
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(text)
+
+        try:
+            await self.hass.async_add_executor_job(_write)
+            _LOGGER.info(
+                "Local OpenAI prompt written to %s (%s chars, model=%s, tools=%s)",
+                path,
+                len(text),
+                model,
+                len(tool_names),
+            )
+            # Also put a short preview in the log (system prompt head + last user)
+            system = next((m.get("content") for m in messages if m.get("role") == "system"), "")
+            user = next(
+                (m.get("content") for m in reversed(messages) if m.get("role") == "user"),
+                "",
+            )
+            _LOGGER.info(
+                "Prompt preview system[:500]=%r user=%r",
+                str(system)[:500],
+                str(user)[:500],
+            )
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Failed to dump Local OpenAI prompt")
 
     async def _live_context_snippet(self, text: str) -> str:
         if not WEATHER_HINT.search(text or ""):

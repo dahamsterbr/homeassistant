@@ -131,6 +131,18 @@ class FusionEngine:
             return
 
         persons = self.ha.persons_home(self.options.persons)
+        if not getattr(self.options, "llm_attribution_enabled", True):
+            if len(persons) == 1:
+                result.person = persons[0]
+                result.model = "heuristic"
+                result.reason = "[disabled] llm_attribution_enabled=false; only one person home"
+            else:
+                result.person = "unknown"
+                result.model = "disabled"
+                result.reason = "[disabled] llm_attribution_enabled=false"
+            self._last_attr_ts[room.name] = now
+            return
+
         snippets = self.memory.recent_summaries(room.name)
         logger.info(
             "Calling LLM for room=%s occupied=True persons_home=%s",

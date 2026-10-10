@@ -109,6 +109,9 @@ class Options(BaseModel):
     mqtt_state_prefix: str = "lhai"
     poll_seconds: int = 15
     learn_enabled: bool = True
+    # When false: occupancy fusion still runs, but LM Studio is NOT called for who-is-in-room
+    # (frees GPU/CPU for Home Assistant Voice / Assist).
+    llm_attribution_enabled: bool = False
     confidence_escalate: float = 0.55
     rooms: list[RoomConfig] = Field(default_factory=list)
     persons: list[str] = Field(

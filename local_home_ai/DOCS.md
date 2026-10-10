@@ -13,6 +13,7 @@ Fuses your existing occupancy sensors and asks a local LM Studio model who is li
 | `model_reason` | Reasoning model id (default Gemma) |
 | `mqtt_host` | Default `core-mosquitto` |
 | `learn_enabled` | Online weight updates |
+| `llm_attribution_enabled` | Call LM Studio for who-is-in-room (turn **off** while focusing on Voice) |
 | `rooms` | Optional override of the built-in thuis room map |
 
 Leave `rooms` empty to use the built-in map (keuken, gang, overloop, wc, computers, voordeur, achterhuis).

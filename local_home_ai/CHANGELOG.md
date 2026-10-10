@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.5
+
+- Option `llm_attribution_enabled` (default off): stop presence who-is-it LLM calls so Voice can use LM Studio alone
+- Local OpenAI: enable/disable Assist LLM, log full prompts to `/config/local_openai_last_prompt.md`
+
 ## 1.0.4
 
 - Longer LM Studio timeouts (180s) to reduce false "connection error" on slow CPU responses

@@ -25,6 +25,9 @@ configuration:
     name: MQTT password
   learn_enabled:
     name: Enable online learning
+  llm_attribution_enabled:
+    name: Use LLM for who-is-in-room
+    description: Turn off to free LM Studio for Home Assistant Voice only. Fusion sensors still work.
   poll_seconds:
     name: Evaluation interval (seconds)
   rooms:

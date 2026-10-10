@@ -6,10 +6,15 @@ CONF_BASE_URL = "base_url"
 CONF_API_KEY = "api_key"
 CONF_MODEL = "model"
 CONF_PROMPT = "prompt"
+CONF_ENABLED = "enabled"
+CONF_LOG_PROMPTS = "log_prompts"
 DEFAULT_BASE_URL = "http://192.168.1.10:1234/v1"
 DEFAULT_API_KEY = "lmstudio"
-# Prefer a small Instruct model for Voice (speed). Upgrade to Gemma 12B only if quality needs it.
+# Prefer a small Instruct model for Voice (speed). Upgrade only if quality needs it.
 DEFAULT_MODEL = "nvidia-nemotron-3-nano-4b"
+DEFAULT_ENABLED = True
+DEFAULT_LOG_PROMPTS = True
+PROMPT_DUMP_FILENAME = "local_openai_last_prompt.md"
 DEFAULT_PROMPT = (
     "You are a helpful Home Assistant voice assistant for the home 'thuis'. "
     "Be concise. Reply with a short confirmation after acting. "

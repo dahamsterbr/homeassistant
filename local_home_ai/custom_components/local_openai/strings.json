@@ -3,12 +3,14 @@
     "step": {
       "user": {
         "title": "Local OpenAI / LM Studio",
-        "description": "Connect Home Assistant Assist to a local OpenAI-compatible server (LM Studio / Bionic).",
+        "description": "Connect Home Assistant Assist / Voice to a local OpenAI-compatible server (LM Studio).",
         "data": {
           "base_url": "Base URL",
           "api_key": "API key",
           "model": "Model",
-          "prompt": "System prompt"
+          "prompt": "System prompt",
+          "enabled": "Enable LLM for Assist / Voice",
+          "log_prompts": "Log prompts to file and HA log"
         }
       }
     },
@@ -17,6 +19,22 @@
     },
     "abort": {
       "already_configured": "This LM Studio endpoint/model is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Local OpenAI options",
+        "description": "Disable the LLM while debugging, or turn on prompt logging. Last prompt is written to /config/local_openai_last_prompt.md",
+        "data": {
+          "base_url": "Base URL",
+          "api_key": "API key",
+          "model": "Model",
+          "prompt": "System prompt",
+          "enabled": "Enable LLM for Assist / Voice",
+          "log_prompts": "Log prompts to file and HA log"
+        }
+      }
     }
   }
 }

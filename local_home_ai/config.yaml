@@ -1,5 +1,5 @@
 name: Local Home AI
-version: "1.0.4"
+version: "1.0.5"
 slug: local_home_ai
 description: Fuse room presence sensors with LM Studio / Bionic local LLMs. All learning data stays on-device.
 url: https://github.com/dahamsterbr/homeassistant
@@ -37,6 +37,7 @@ options:
   mqtt_state_prefix: "lhai"
   poll_seconds: 15
   learn_enabled: true
+  llm_attribution_enabled: false
   confidence_escalate: 0.55
   rooms: []
 schema:
@@ -54,6 +55,7 @@ schema:
   mqtt_state_prefix: str
   poll_seconds: int(5,300)
   learn_enabled: bool
+  llm_attribution_enabled: bool
   confidence_escalate: float(0,1)
   rooms:
     - name: str

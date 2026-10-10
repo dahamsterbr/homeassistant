@@ -28,6 +28,7 @@ Never commit long-lived access tokens. Put the HA token only in add-on options. 
 ## Docs
 
 - [docs/SETUP.md](docs/SETUP.md) — first-time setup and room map for thuis
+- [docs/VOICE.md](docs/VOICE.md) — Home Assistant Voice pipeline, LLM on/off, prompt logging
 - [docs/OPERATIONS.md](docs/OPERATIONS.md) — updates, backups, troubleshooting, Bionic MCP phase 2
 - [local_home_ai/DOCS.md](local_home_ai/DOCS.md) — add-on panel documentation
 
