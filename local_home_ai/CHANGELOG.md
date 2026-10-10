@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.4
+
+- Longer LM Studio timeouts (180s) to reduce false "connection error" on slow CPU responses
+- Docs: recommend small fast models for Voice (Nemotron nano / Qwen3 1.7B–4B)
+
 ## 1.0.3
 
 - Assist: multi-command sentences (e.g. lamp A uit en lamp B aan) via parallel/sequential tool calls

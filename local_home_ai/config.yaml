@@ -1,5 +1,5 @@
 name: Local Home AI
-version: "1.0.3"
+version: "1.0.4"
 slug: local_home_ai
 description: Fuse room presence sensors with LM Studio / Bionic local LLMs. All learning data stays on-device.
 url: https://github.com/dahamsterbr/homeassistant

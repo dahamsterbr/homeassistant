@@ -113,7 +113,7 @@ class LLMClient:
         }
         started = time.time()
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=180.0) as client:
                 resp = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers=self._headers(),

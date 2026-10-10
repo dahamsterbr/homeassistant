@@ -83,7 +83,22 @@ Or copy from this repo’s `custom_components/local_openai`.
    - STT: Whisper (or preferred)
    - TTS: Piper (or preferred)
 6. Expose the lights/switches you want to control to Assist (entity settings → voice assistants).
-7. Prefer model **`google/gemma-4-12b`** for voice control; enable tool calling in LM Studio.
+7. For **Voice speed**, use a small Instruct model (see below). Enable tool calling in LM Studio. Keep context short (2k–4k).
+
+### Recommended models (speed vs quality)
+
+| Use | Model (search in LM Studio) | Notes |
+|-----|----------------------------|--------|
+| **Voice / multi-light (best default)** | `nvidia-nemotron-3-nano-4b` or **Qwen3 1.7B / 4B Instruct** Q4_K_M | Fast on GPU, usable on CPU, decent tools |
+| Ultra-fast CPU | **Qwen3 0.6B / 1.7B Instruct** Q4_K_M | Lowest latency; OK for simple on/off |
+| Better Dutch + multi-command | **Qwen3 4B Instruct** or **Phi-4-mini** (~3.8B) Q4_K_M | Still much faster than 12B |
+| Quality when GPU has headroom | `google/gemma-4-12b` | Slow on CPU; often causes Assist timeouts |
+
+Tips if you see `LM Studio error connection error`:
+- Load **one** small model and keep it loaded (no swapping mid-request)
+- Server on `0.0.0.0:1234`, GPU offload as many layers as fit
+- Turn **thinking/reasoning** off for Voice
+- Set Assist conversation model to the small one (not Gemma 12B)
 
 Multi-command examples that should work with Local OpenAI:
 

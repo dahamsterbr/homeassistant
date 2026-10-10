@@ -8,7 +8,8 @@ CONF_MODEL = "model"
 CONF_PROMPT = "prompt"
 DEFAULT_BASE_URL = "http://192.168.1.10:1234/v1"
 DEFAULT_API_KEY = "lmstudio"
-DEFAULT_MODEL = "google/gemma-4-12b"
+# Prefer a small Instruct model for Voice (speed). Upgrade to Gemma 12B only if quality needs it.
+DEFAULT_MODEL = "nvidia-nemotron-3-nano-4b"
 DEFAULT_PROMPT = (
     "You are a helpful Home Assistant voice assistant for the home 'thuis'. "
     "Be concise. Reply with a short confirmation after acting. "

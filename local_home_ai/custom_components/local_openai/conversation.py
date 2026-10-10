@@ -446,11 +446,19 @@ def _chat_completion(
 ) -> tuple[str, list[dict[str, Any]]]:
     from openai import OpenAI
 
-    client = OpenAI(base_url=base_url, api_key=api_key)
+    # Voice + multi-tool turns can take a while on CPU; default SDK timeouts feel like
+    # "connection error" when the model is just slow.
+    client = OpenAI(
+        base_url=base_url,
+        api_key=api_key,
+        timeout=180.0,
+        max_retries=1,
+    )
     kwargs: dict[str, Any] = {
         "model": model,
         "messages": messages,
         "temperature": 0.1,
+        "max_tokens": 512,
     }
     if tools:
         kwargs["tools"] = tools
